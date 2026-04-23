@@ -1,3 +1,66 @@
 spring:
   application:
     name: analytics-dashboard
+
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 30000
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+    show-sql: false
+    open-in-view: false
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    properties:
+      security.protocol: SSL
+      ssl.truststore.location: ${KAFKA_TRUSTSTORE_LOCATION}
+      ssl.truststore.password: ${KAFKA_TRUSTSTORE_PASSWORD}
+      ssl.truststore.type: JKS
+      ssl.keystore.location: ${KAFKA_KEYSTORE_LOCATION}
+      ssl.keystore.password: ${KAFKA_KEYSTORE_PASSWORD}
+      ssl.keystore.type: PKCS12
+      ssl.key.password: ${KAFKA_KEYSTORE_PASSWORD}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+    consumer:
+        group-id: analytics-dashboard-consumer
+        auto-offset-reset: earliest
+        key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+        value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+        properties:
+          spring.json.trusted.packages: "com.analytics.domain"
+          spring.json.use.type.headers: false
+          spring.json.value.default.type: com.analytics.domain.OrderEvent
+
+server:
+  port: 8080
+
+app:
+  kafka:
+    topic:
+      orders: order-events
+      metrics: api-metrics
+
+logging:
+  level:
+    root: INFO
+    com.analytics: DEBUG
+    org.apache.kafka: WARN
+    org.springframework.kafka: INFO
