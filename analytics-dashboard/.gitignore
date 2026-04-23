@@ -31,3 +31,11 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Secrets
+run-local.sh
+.env
+*.env
+
+# Kafka certificates - NEVER commit these
+src/main/resources/kafka-certs/
