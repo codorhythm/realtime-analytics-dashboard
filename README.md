@@ -7,15 +7,18 @@ This is a learning/portfolio project — built to deeply understand event-driven
 ---
 
 ## Architecture
+
+```text
 HTTP POST  ──►  Spring Controller  ──►  OrderService  ──►  KafkaProducer
-│
-▼
-Aiven Kafka
-(order-events topic)
-│
-▼
-GET endpoints  ◄──  PostgreSQL  ◄──  KafkaConsumer  ◄────────┘
-(analytics)         (Neon)          (saves to DB)
+                                                                 │
+                                                                 ▼
+                                                          Aiven Kafka
+                                                       (order-events topic)
+                                                                 │
+                                                                 ▼
+   GET endpoints  ◄──  PostgreSQL  ◄──  KafkaConsumer  ◄────────┘
+   (analytics)         (Neon)          (saves to DB)
+```
 
 The producer fires-and-forgets: the HTTP request returns `202 Accepted` as soon as the event is queued for Kafka, decoupling the API response time from database writes. Persistence happens out-of-band via the consumer, which means the API stays fast even under load.
 
