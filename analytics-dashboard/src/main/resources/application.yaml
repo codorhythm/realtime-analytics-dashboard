@@ -57,6 +57,9 @@ app:
     topic:
       orders: order-events
       metrics: api-metrics
+  simulator:
+    enabled: true
+    interval-ms: 2000
 
 logging:
   level:
