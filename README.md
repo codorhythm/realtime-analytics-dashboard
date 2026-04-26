@@ -31,25 +31,25 @@ The producer fires-and-forgets: the HTTP request returns `202 Accepted` as soon 
 
 The simulator generates a synthetic order every 2 seconds. The producer publishes to Kafka, the consumer picks it up and persists to Postgres — all observable in the application log:
 
-![Simulator logs](docs/screenshots/01-simulator-logs.PNG)
+![Simulator logs](analytics-dashboard/docs/screenshots/01-simulator-logs.png)
 
 **Events flowing through Kafka**
 
 Messages visible in the Aiven console — same JSON payload that the producer sent, sitting in the `order-events` topic until the consumer drains it:
 
-![Aiven Kafka messages](docs/screenshots/02-aiven-kafka-messages.png)
+![Aiven Kafka messages](analytics-dashboard/docs/screenshots/02-aiven-kafka-messages.png)
 
 **Data persisted to Postgres**
 
 After consumption, orders land in a Neon-hosted PostgreSQL database, indexed for fast analytics queries:
 
-![Neon Postgres data](docs/screenshots/03-neon-postgres-data.png)
+![Neon Postgres data](analytics-dashboard/docs/screenshots/03-neon-postgres-data.png)
 
 **Analytics endpoint output**
 
 REST endpoints expose aggregations over the persisted data — total revenue, breakdowns by region/status, time-bucketed throughput:
 
-![Analytics endpoint](docs/screenshots/04-analytics-endpoint.png)
+![Analytics endpoint](analytics-dashboard/docs/screenshots/04-analytics-endpoint.png)
 ---
 
 ## Tech stack
