@@ -105,7 +105,7 @@ Requires Java 17+, Maven, and accounts at [aiven.io](https://aiven.io) (free Kaf
 ## Roadmap
 
 - [x] Phase 1: Domain model, Kafka producer/consumer, Postgres persistence, REST endpoints
-- [ ] Phase 2: Scheduled order simulator + analytics endpoint validation
+- [x] Phase 2: Scheduled order simulator + analytics endpoint validation
 - [ ] Phase 3: WebSocket push for live order feed
 - [ ] Phase 4: Grafana Cloud dashboard backed by Postgres
 - [ ] Phase 5: Deploy to Render/Railway
@@ -119,3 +119,5 @@ Requires Java 17+, Maven, and accounts at [aiven.io](https://aiven.io) (free Kaf
 - Spring Boot's `@KafkaListener` lifecycle and how unhandled exceptions cause infinite redelivery
 - Why replication factor matters even on a one-broker free tier (it doesn't, until your provider enforces it)
 - The boring but real cost of free-tier constraints (250 KiB/s, 5 topics × 2 partitions, 24h idle shutdown)
+- `@ConditionalOnProperty` lets feature-flagged code ship cleanly: the simulator stays dormant in prod unless explicitly enabled, no commenting out beans
+- Weighted random distributions matter more than they sound — uniform random looks fake, but a 50/20/15/10/3/2 split feels real
