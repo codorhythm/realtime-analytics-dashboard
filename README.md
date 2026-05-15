@@ -1,8 +1,6 @@
-# Real-time Analytics Dashboard
+# OrderPulse: Event-Driven Order Analytics Pipeline
 
-An event-driven order analytics service built with Spring Boot, Kafka, and PostgreSQL. Orders flow through a Kafka topic, get persisted asynchronously by a consumer, and are queryable via REST endpoints that expose revenue, regional breakdowns, and per-minute throughput.
-
-This is a learning/portfolio project — built to deeply understand event-driven architecture, async processing, and the operational concerns that come with running Kafka in production (deserialization failures, poison pills, mTLS, replication factor).
+An event-driven order analytics service built with Spring Boot, Kafka, and PostgreSQL. Orders flow through a Kafka topic, get persisted asynchronously by an idempotent consumer with dead-letter queue routing, and are queryable via REST endpoints that expose revenue, regional breakdowns, and per-minute throughput.
 
 ---
 
@@ -12,7 +10,7 @@ This is a learning/portfolio project — built to deeply understand event-driven
 HTTP POST  ──►  Spring Controller  ──►  OrderService  ──►  KafkaProducer
                                                                  │
                                                                  ▼
-                                                          Aiven Kafka
+                                                          Upstash Kafka
                                                        (order-events topic)
                                                                  │
                                                                  ▼
@@ -24,7 +22,6 @@ The producer fires-and-forgets: the HTTP request returns `202 Accepted` as soon 
 
 ---
 
-
 ## Screenshots
 
 **Producer + consumer running together**
@@ -35,9 +32,9 @@ The simulator generates a synthetic order every 2 seconds. The producer publishe
 
 **Events flowing through Kafka**
 
-Messages visible in the Aiven console — same JSON payload that the producer sent, sitting in the `order-events` topic until the consumer drains it:
+Messages visible in the Upstash console — same JSON payload that the producer sent, sitting in the `order-events` topic until the consumer drains it:
 
-![Aiven Kafka messages](analytics-dashboard/docs/screenshots/02-aiven-kafka-messages.png)
+![Upstash Kafka messages](analytics-dashboard/docs/screenshots/02-aiven-kafka-messages.png)
 
 **Data persisted to Postgres**
 
@@ -50,6 +47,7 @@ After consumption, orders land in a Neon-hosted PostgreSQL database, indexed for
 REST endpoints expose aggregations over the persisted data — total revenue, breakdowns by region/status, time-bucketed throughput:
 
 ![Analytics endpoint](analytics-dashboard/docs/screenshots/04-analytics-endpoint.png)
+
 ---
 
 ## Tech stack
@@ -57,7 +55,7 @@ REST endpoints expose aggregations over the persisted data — total revenue, br
 | Layer       | Choice                          | Why                                                                 |
 |-------------|----------------------------------|---------------------------------------------------------------------|
 | Runtime     | Java 17, Spring Boot 3.5         | LTS, broad ecosystem, current stable Spring Boot                    |
-| Messaging   | Aiven Kafka (free tier, mTLS)    | Real Kafka protocol, no credit card, certificate-based auth         |
+| Messaging   | Upstash Kafka (free tier)        | Real Kafka protocol, no credit card, serverless pricing             |
 | Database    | Neon PostgreSQL 17 (serverless)  | Managed Postgres with generous free tier, scale-to-zero             |
 | ORM         | Spring Data JPA + Hibernate      | Standard for Spring; entity mapping is straightforward for orders   |
 | Build       | Maven                            | Familiar, plays well with Spring Boot starters                      |
@@ -69,17 +67,17 @@ REST endpoints expose aggregations over the persisted data — total revenue, br
 **Why Kafka instead of synchronous DB writes?**  
 The original use case is bursty: order events can spike during sales or product launches. Writing to Postgres synchronously on every request couples API latency to DB throughput. Kafka decouples them — the API only has to enqueue, and a separate consumer drains at whatever rate the DB can handle. It also gives us a replayable event log for free, which is useful for rebuilding read models or debugging.
 
-**Why mTLS for Kafka instead of SASL?**  
-Aiven's free tier exposes Kafka over mTLS by default. mTLS authenticates the client at the TLS layer using a certificate, instead of sending a username/password each connection. It means the keystore IS the credential — there's no way to leak a password in a log line. Slightly more setup (PKCS12 + JKS keystores), better security posture.
-
 **Why `ErrorHandlingDeserializer` wrapping `JsonDeserializer`?**  
 Bare `JsonDeserializer` will infinite-loop on a poison-pill message: deserialization fails, the offset isn't committed, Kafka redelivers, fails again. `ErrorHandlingDeserializer` catches the deserialization exception, logs it, and lets the listener move on. Caught this the hard way during initial setup.
 
-**Why `replication factor = 2`?**  
-Aiven's free tier requires `min RF = 2` to prevent data loss from a single broker termination. For a hobby project I'd run RF=1, but the platform forces a more production-realistic setup. Free education.
+**Why dead-letter queue routing?**  
+Invalid events that fail processing are routed to a separate DLQ topic instead of blocking the main pipeline. This prevents one malformed message from stalling all downstream consumers while preserving the event for inspection and replay.
+
+**Why PostgreSQL range partitioning by month?**  
+Time-series order data grows unboundedly. Without partitioning, queries like "last 7 days revenue" scan the entire table. Range partitioning by month means those queries touch only 1-2 partitions, keeping analytics fast as data grows.
 
 **Why disable Spring's docker-compose integration?**  
-The project ships a `compose.yaml` from the initial scaffolding, but everything runs against managed cloud services now (Neon, Aiven). Spring Boot would otherwise try to start Docker on every run and fail. Removed the dependency entirely so the failure mode is impossible.
+The project ships a `compose.yaml` from the initial scaffolding, but everything runs against managed cloud services now (Neon, Upstash). Spring Boot would otherwise try to start Docker on every run and fail. Removed the dependency entirely so the failure mode is impossible.
 
 ---
 
@@ -113,20 +111,12 @@ Example POST body:
 
 ## Running locally
 
-Requires Java 17+, Maven, and accounts at [aiven.io](https://aiven.io) (free Kafka tier) and [neon.tech](https://neon.tech) (free Postgres).
+Requires Java 17+, Maven, and accounts at [upstash.com](https://upstash.com) (free Kafka tier) and [neon.tech](https://neon.tech) (free Postgres).
 
 1. Provision Kafka and Postgres in their respective consoles.
-2. Download Aiven's `service.key`, `service.cert`, `ca.pem` into `src/main/resources/kafka-certs/`.
-3. Generate Java keystores:
-```bash
-   cd src/main/resources/kafka-certs
-   openssl pkcs12 -export -in service.cert -inkey service.key \
-     -out client.keystore.p12 -name kafka-client -password pass:changeit
-   keytool -import -file ca.pem -alias aiven-ca \
-     -keystore client.truststore.jks -storepass changeit -noprompt
-```
-4. Set environment variables (see `run-local.sh.example`).
-5. `./mvnw spring-boot:run`
+2. Copy your Upstash Kafka bootstrap URL and credentials into `application.yml`.
+3. Copy your Neon PostgreSQL connection string into `application.yml`.
+4. `./mvnw spring-boot:run`
 
 ---
 
@@ -143,9 +133,8 @@ Requires Java 17+, Maven, and accounts at [aiven.io](https://aiven.io) (free Kaf
 ## What I learned
 
 - Kafka client tuning: trusted packages, default type, and the difference between `__TypeId__` headers and explicit deserialization
-- mTLS setup with `keytool` + `openssl` and the surprisingly fiddly difference between PKCS12 and JKS
 - Spring Boot's `@KafkaListener` lifecycle and how unhandled exceptions cause infinite redelivery
-- Why replication factor matters even on a one-broker free tier (it doesn't, until your provider enforces it)
-- The boring but real cost of free-tier constraints (250 KiB/s, 5 topics × 2 partitions, 24h idle shutdown)
+- Why dead-letter queues matter in production: one poison-pill message can stall an entire consumer group without them
+- PostgreSQL range partitioning tradeoffs: faster time-range queries at the cost of slightly more complex schema management
 - `@ConditionalOnProperty` lets feature-flagged code ship cleanly: the simulator stays dormant in prod unless explicitly enabled, no commenting out beans
 - Weighted random distributions matter more than they sound — uniform random looks fake, but a 50/20/15/10/3/2 split feels real
